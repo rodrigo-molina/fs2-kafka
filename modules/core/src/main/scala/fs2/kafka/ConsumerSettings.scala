@@ -373,6 +373,19 @@ sealed abstract class ConsumerSettings[F[_], K, V] {
     */
   def withCredentials(credentialsStore: KafkaCredentialStore): ConsumerSettings[F, K, V]
 
+
+  /**
+   * When set to true, the consumer will propagate empty Chunks from polls.
+   * 
+   * Default is set to false, meaning that the consumer will only propagate non-empty Chunks from polls.
+   */
+  def propagateEmptyPolls: Boolean
+
+  /**
+   * Creates a new [[ConsumerSettings]] with the specified [[propagateEmptyPolls]].
+   */
+  def withPropagateEmptyPolls(propagateEmptyPolls: Boolean): ConsumerSettings[F, K, V]
+
 }
 
 object ConsumerSettings {
@@ -388,7 +401,8 @@ object ConsumerSettings {
     override val pollTimeout: FiniteDuration,
     override val commitRecovery: CommitRecovery,
     override val recordMetadata: ConsumerRecord[K, V] => String,
-    override val maxPrefetchBatches: Int
+    override val maxPrefetchBatches: Int,
+    override val propagateEmptyPolls: Boolean,
   ) extends ConsumerSettings[F, K, V] {
 
     override def withCustomBlockingContext(ec: ExecutionContext): ConsumerSettings[F, K, V] =
@@ -504,6 +518,9 @@ object ConsumerSettings {
     override def withMaxPrefetchBatches(maxPrefetchBatches: Int): ConsumerSettings[F, K, V] =
       copy(maxPrefetchBatches = Math.max(2, maxPrefetchBatches))
 
+    override def withPropagateEmptyPolls(propagateEmptyPolls: Boolean): ConsumerSettings[F, K, V] =
+      copy(propagateEmptyPolls = propagateEmptyPolls)
+
     override def withCredentials(
       credentialsStore: KafkaCredentialStore
     ): ConsumerSettings[F, K, V] =
@@ -542,7 +559,8 @@ object ConsumerSettings {
       pollTimeout = 50.millis,
       commitRecovery = CommitRecovery.Default,
       recordMetadata = _ => OffsetFetchResponse.NO_METADATA,
-      maxPrefetchBatches = 2
+      maxPrefetchBatches = 2,
+      propagateEmptyPolls = false,
     )
 
   def apply[F[_], K, V](

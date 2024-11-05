@@ -204,7 +204,7 @@ object KafkaConsumer {
                   } >> deferred.get
 
                   fetch.flatMap { case (chunk, reason) =>
-                    val enqueueChunk = chunks.offer(Some(chunk)).unlessA(chunk.isEmpty)
+                    val enqueueChunk = chunks.offer(Some(chunk)).whenA(chunk.nonEmpty || settings.propagateEmptyPolls)
 
                     val completeRevoked =
                       stopReqs.complete(()).void.whenA(reason.topicPartitionRevoked)
