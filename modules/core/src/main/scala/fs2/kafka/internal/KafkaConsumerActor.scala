@@ -234,16 +234,15 @@ final private[kafka] class KafkaConsumerActor[F[_], K, V](
       }
   }
 
-  private[this] val offsetCommit: Map[TopicPartition, OffsetAndMetadata] => F[Unit] =
-    offsets => {
-      val commit = runCommitAsync(offsets) { cb =>
-        requests.offer(Request.Commit(offsets, cb))
-      }
-
-      commit.handleErrorWith {
-        settings.commitRecovery.recoverCommitWith(offsets, commit)
-      }
+  private[this] def offsetCommitAsync(offsets: Map[TopicPartition, OffsetAndMetadata]): F[Unit] = {
+    val commit = runCommitAsync(offsets) { cb =>
+      requests.offer(Request.Commit(offsets, cb))
     }
+
+    commit.handleErrorWith {
+      settings.commitRecovery.recoverCommitWith(offsets, commit)
+    }
+  }
 
   private[this] def committableConsumerRecord(
     record: ConsumerRecord[K, V],
@@ -258,7 +257,7 @@ final private[kafka] class KafkaConsumerActor[F[_], K, V](
           record.offset + 1L,
           settings.recordMetadata(record)
         ),
-        commit = offsetCommit
+        commit = offsetCommitAsync
       )
     )
 
