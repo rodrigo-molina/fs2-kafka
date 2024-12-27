@@ -371,12 +371,7 @@ object KafkaConsumer {
         partitionedStream.parJoinUnbounded
 
       override def commitAsync(offsets: Map[TopicPartition, OffsetAndMetadata]): F[Unit] =
-        request { callback =>
-          Request.ManualCommitAsync(
-            callback = callback,
-            offsets = offsets
-          )
-        }
+        actor.offsetCommitAsync(offsets)
 
       override def commitSync(offsets: Map[TopicPartition, OffsetAndMetadata]): F[Unit] =
         request { callback =>
