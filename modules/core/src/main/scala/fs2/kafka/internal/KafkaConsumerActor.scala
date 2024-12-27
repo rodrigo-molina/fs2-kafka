@@ -127,18 +127,8 @@ final private[kafka] class KafkaConsumerActor[F[_], K, V](
         })
       )
 
-  private[this] def manualCommitAsync(request: Request.ManualCommitAsync[F]): F[Unit] = {
-    val commit = runCommitAsync(request.offsets) { cb =>
-      commitAsync(request.offsets, cb)
-    }
-
-    val res = commit.attempt >>= request.callback
-
-    // We need to start this action in a separate fiber without waiting for the result,
-    // because commitAsync could be resolved only with the poll consumer call.
-    // Which could be done only when the current request is processed.
-    res.start.void
-  }
+  private[this] def manualCommitAsync(request: Request.ManualCommitAsync[F]): F[Unit] =
+    offsetCommitAsync(request.offsets).attempt >>= request.callback
 
   private[this] def assigned(assigned: SortedSet[TopicPartition]): F[Unit] =
     ref
@@ -234,15 +224,15 @@ final private[kafka] class KafkaConsumerActor[F[_], K, V](
       }
   }
 
-  private[this] def offsetCommitAsync(offsets: Map[TopicPartition, OffsetAndMetadata]): F[Unit] = {
-    val commit = runCommitAsync(offsets) { cb =>
-      requests.offer(Request.Commit(offsets, cb))
-    }
+  private[this] def offsetCommitAsync(offsets: Map[TopicPartition, OffsetAndMetadata]): F[Unit] =
+    runCommitAsync(offsets)(cb => requests.offer(Request.Commit(offsets, cb)))
 
-    commit.handleErrorWith {
-      settings.commitRecovery.recoverCommitWith(offsets, commit)
+  private[this] def resilientOffsetCommitAsync(
+    offsets: Map[TopicPartition, OffsetAndMetadata]
+  ): F[Unit] =
+    offsetCommitAsync(offsets).handleErrorWith {
+      settings.commitRecovery.recoverCommitWith(offsets, offsetCommitAsync(offsets))
     }
-  }
 
   private[this] def committableConsumerRecord(
     record: ConsumerRecord[K, V],
@@ -257,7 +247,7 @@ final private[kafka] class KafkaConsumerActor[F[_], K, V](
           record.offset + 1L,
           settings.recordMetadata(record)
         ),
-        commit = offsetCommitAsync
+        commit = resilientOffsetCommitAsync
       )
     )
 
